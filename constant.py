@@ -1,0 +1,23 @@
+NONSENSE_COLS = ['apply_addr', 'home_addr', 'per_addr', 'biz_addr', 'oth_addr', 'city', 'cityCode', 'vehicle_id',
+                 'car_code', 'driver_number', 'type_vehicle_id', 'biz_name', 'reg_num', 'org_num', 'biz_workfor',
+                 'KeyNo', 'biz_regnum', 'biz_Legalperson', 'event', 'af_swift_number', 'apply_type', 'device_type',
+                 'device_id', 'house_type', 'CommName', 'area', 'room_type', 'floor_building', 'builted_time', 'floor',
+                 'totalfloor', 'toward', 'special_factors', 'hall', 'toilet', 'house_number', 'position', 'renovation',
+                 'id', 'cell', 'mail', 'name', 'bank_card1', 'user_date', 'user_time', 'sl_user_date', 'group', 'tel',
+                 'time_range', 'beginTime', 'endTime', 'custApiCode', 'month', 'page', 'range', 'apply_date',
+                 'other_var1', 'other_var2', 'other_var3', 'other_var4', 'other_var5', 'city_id', 'taskid', 'IP',
+                 'longitude', 'latitude', 'no', 'days', 'remainder', 'link_name1', 'link_id1', 'link_cell1',
+                 'link_name2', 'link_id2', 'link_cell2', 'link_name3', 'link_id3', 'link_cell3', 'gid',
+                 'ExtData_CAR_PRICE', 'ExtData_MARRY_STATUS', 'ExtData_HOUSE_PROPERTY', 'ExtData_SEX', 'ExtData_HUKOU',
+                 'ExtData_age', 'ExtData_loan_reject_num', 'ExtData_rh_max_card_bal_per_m12', 'ExtData_rh_max_loan_bal',
+                 'ExtData_rh_tot_card_amt', 'id_photo', 'daily_photo', 'other_var6', 'other_var7', 'other_var8',
+                 'other_var9', 'other_var10', 'other_var11', 'other_var12', 'other_var13', 'other_var14', 'other_var15',
+                 'other_var16', 'other_var17', 'other_var18', 'other_var19', 'other_var20', 'other_var21',
+                 'other_var22', 'other_var23', 'other_var24', 'other_var25', 'other_var26', 'other_var27',
+                 'other_var28', 'other_var29', 'other_var30', 'start_date', 'bank_photo', 'passDate', 'cus_group',
+                 'vin', 'carName', 'trimId', 'mileage', 'buyCarDate', 'cityId', 'provinceId', 'colorId', 'address',
+                 'idCard', 'bank_id', 'addrType', 'coordinate', 'coordinateType', 'loan_type', 'name2', 'qq',
+                 'passport_number', 'tel_home', 'tel_biz', 'id_type', 'bank_card2', 'linkman_cell', 'cus_username',
+                 'swift_number', 'code']
+
+
