@@ -16,9 +16,11 @@ from pandas.core.dtypes.common import (
 )
 from tqdm import tqdm
 import lightgbm as lgb
-from lightgbm.sklearn import LGBMClassifier
+from lightgbm.sklearn import LGBMClassifier, LGBMRegressor
 import time
 from hyperopt import STATUS_OK
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc
 
 logger = getLogger("Data_process")
 logger.setLevel(INFO)
@@ -821,3 +823,191 @@ def ks_kfold_objective(
         }
 
     return ks_score
+
+
+class LGBModelTuner(object):
+    def __init__(self, lgbm, X, y, X_test, y_test, hit_indices):
+        self.estimator = lgbm
+        self.X, self.Y = X, y
+        self.X_test, self.Y_test = X_test, y_test
+        assert hit_indices is not None, "Hit indices are necessary to get model result!"
+        self.hit_indices = hit_indices
+        self.dataset_train = lgb.Dataset(X.values, label=y.values)
+        self.dataset_test = lgb.Dataset(X_test.values, label=y_test.values)
+        # TODO: add history
+        self.history = []
+        if isinstance(lgbm, lgb.Booster):
+            assert (
+                    lgbm.params.get("seed") is not None
+            ), "Better to set `seed` for lightgbm booster!"
+            lgbm.params.update({"num_threads": -1})
+            self.params = lgbm.params
+        elif isinstance(lgbm, (LGBMClassifier, LGBMRegressor)):
+            assert (
+                    lgbm.get_params().get("random_state") is not None
+            ), "Better to set `random_state` for lightgbm booster!"
+            lgbm.n_jobs = -1
+            self.params = lgbm.get_params()
+        else:
+            raise TypeError(
+                "Input model should be a `lgb.Booster` or `LGBMClassifier`/`LGBMRegressor`!"
+            )
+
+    def get_model_result(self, params: dict) -> dict:
+        X, y = self.X.values, self.Y.values
+        X_test, y_test = self.X_test.values, self.Y_test.values
+        if isinstance(self.estimator, lgb.Booster):
+            params["metric"] = "auc"
+            estimator = lgb.train(params, self.dataset_train)
+            pred_train = pd.Series(
+                estimator.predict(self.dataset_train), index=self.X.index
+            )
+            pred_test = pd.Series(
+                estimator.predict(self.dataset_test), index=self.X_test.index
+            )
+        elif isinstance(self.estimator, LGBMRegressor):
+            estimator = LGBMRegressor(**params)
+            estimator.fit(X, y, eval_metric="auc")
+            pred_train = pd.Series(estimator.predict(X), index=self.X.index)
+            pred_test = pd.Series(estimator.predict(X_test), index=self.X_test.index)
+        elif isinstance(self.estimator, LGBMClassifier):
+            estimator = LGBMClassifier(**params)
+            estimator.fit(X, y, eval_metric="auc")
+            pred_train = pd.Series(estimator.predict_proba(X)[:, 1], index=self.X.index)
+            pred_test = pd.Series(
+                estimator.predict_proba(X_test)[:, 1], index=self.X_test.index
+            )
+        else:
+            raise TypeError(
+                "Input model should be a `lgb.Booster` or `LGBMClassifier`/`LGBMRegressor`!"
+            )
+        # 置空得分
+        pred_train.loc[~pred_train.index.isin(self.hit_indices)] = np.nan
+        pred_test.loc[~pred_test.index.isin(self.hit_indices)] = np.nan
+        # 计算模型评估指标
+        ks_train, ks_test = calc_ks(-pred_train, y), calc_ks(-pred_test, y_test)
+        auc_train, auc_test = calc_auc(pred_train, y), calc_auc(pred_test, y_test)
+        # return {'train': (ks_train, auc_train), 'test': (ks_test, auc_test)}
+        return {"ks": (ks_train, ks_test), "auc": (auc_train, auc_test)}
+
+    def try_tune(self, param: str, space: list, plot: bool = True) -> None:
+        params = {k: v for k, v in self.params.items()}
+        ks_trains, ks_tests = [], []
+        auc_trains, auc_tests = [], []
+        for value in space:
+            params.update({param: value})
+            result = self.get_model_result(params)
+            ks_train, ks_test = result["ks"][0], result["ks"][1]
+            auc_train, auc_test = result["auc"][0], result["auc"][1]
+            ks_trains.append(ks_train)
+            ks_tests.append(ks_test)
+            auc_trains.append(auc_train)
+            auc_tests.append(auc_test)
+            logger.info(
+                "While {}={}, model ks train={}, test={}, auc is train={}, test={}...".format(
+                    param,
+                    repr(value) if isinstance(value, str) else value,
+                    ks_train,
+                    ks_test,
+                    auc_train,
+                    auc_test,
+                )
+            )
+        if plot:
+            models_ks(param, space, ks_trains, ks_tests)
+            models_auc(param, space, auc_trains, auc_tests)
+        return None
+
+    def tune(self, param: str, value: Union[str, int, float]) -> None:
+        self.params.update({param: value})
+        #        check_lgb_params(self.params)
+        lgbm = self.estimator
+        if isinstance(lgbm, lgb.Booster):
+            lgbm.params = self.params
+        elif isinstance(lgbm, (LGBMClassifier, LGBMRegressor)):
+            lgbm.set_params(**self.params)
+        else:
+            raise TypeError(
+                "Input model should be a `lgb.Booster` or `LGBMClassifier`/`LGBMRegressor`!"
+            )
+        logger.info(self.params)
+        return None
+
+
+def models_ks(hyper_param: str, space: list, ks_trains: list, ks_tests: list) -> None:
+    """
+    Plot train test data distribution curve.
+
+    :param hyper_param: hyper parameter
+    :param space: parameter value space
+    :param ks_trains: train data ks
+    :param ks_tests: test data ks
+    :return: None
+    """
+    plt.figure()
+    plt.plot(space, ks_trains, "s-", color="r", label="KS train")
+    plt.plot(space, ks_tests, "o-", color="g", label="KS test")
+    if len(space) <= 20:
+        plt.xticks(space)
+    else:
+        pass
+    plt.legend(loc="lower right")
+    plt.ylabel("KS value")
+    plt.xlabel(f"{hyper_param}")
+    plt.title(f"KS value vs. Parameter tuning")
+    plt.show()
+    return None
+
+
+def models_auc(
+        hyper_param: str, space: list, auc_trains: list, auc_tests: list
+) -> None:
+    """
+    Plot train test data distribution curve.
+
+    :param hyper_param: hyper parameter
+    :param space: parameter value space
+    :param auc_trains: train data auc
+    :param auc_tests: test data auc
+    :return: None
+    """
+    plt.figure()
+    plt.plot(space, auc_trains, "s-", color="r", label="AUC train")
+    plt.plot(space, auc_tests, "o-", color="g", label="AUC test")
+
+    if len(space) <= 20:
+        plt.xticks(space)
+    else:
+        pass
+
+    plt.legend(loc="lower right")
+    plt.ylabel("AUC value")
+    plt.xlabel(f"{hyper_param}")
+    plt.title(f"AUC value vs. Parameter tuning")
+    plt.show()
+    return None
+
+
+def calc_auc(
+        preds: Union[np.ndarray, pd.Series], actual: Union[np.ndarray, pd.Series]
+) -> float:
+    """
+    Calculate receiver operating characteristic.
+
+    :param preds: predict result
+    :param actual: actual label
+    :return: false positive rate, true positive rate and auc value
+    """
+    if isinstance(actual, pd.Series):
+        actual = actual.values
+    if isinstance(preds, pd.Series):
+        preds = preds.values
+
+    notna_pos = ~np.isnan(preds)
+    actual = actual[notna_pos]
+    preds = preds[notna_pos]
+
+    fpr, tpr, _ = roc_curve(actual, preds)
+    auc_value = auc(fpr, tpr)
+    logger.info("Current predict AUC is {}...".format(auc_value))
+    return auc_value

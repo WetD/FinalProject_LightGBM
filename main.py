@@ -1,5 +1,5 @@
 # %%
-
+import pickle
 from sklearn.feature_selection import RFE
 import time
 import constant
@@ -9,6 +9,10 @@ from lightgbm.sklearn import LGBMClassifier
 import bairong
 import functions
 import pandas as pd
+from hyperopt import fmin, tpe, hp, Trials
+import csv
+import matplotlib.pyplot as plt
+import ast
 
 fixed_params = {
     # "importance_type": "gain",  # result contains total gains of splits which use the feature.
@@ -85,7 +89,6 @@ hit_indices = bairong.get_hit_indices(Data, flags)
 X, X_test, Y, Y_test = functions.split_train_test(X, Y, test_size=0.3, random_state=3)
 # %%
 
-import matplotlib.pyplot as plt
 
 plt.hist(Y, edgecolor="k")
 plt.xlabel("Label")
@@ -110,30 +113,6 @@ X = pd.read_pickle("./X.pkl")
 
 lgbm_train = lgb.Dataset(X, Y, silent=True)
 
-fixed_params = {
-    # "importance_type": "gain",  # result contains total gains of splits which use the feature.
-    # 'class_weight': None,  # 类别型变量权重
-    # 'n_estimators': 500,
-    "boost_from_average": True,
-    "boosting_type": "gbdt",  # 提升树的类型 boost/boosting
-    "objective": "binary",
-    "subsample": 0.8,  # 数据采样比例  bagging_fraction
-    "colsample_bytree": 0.8,  # 每棵树特征选取比例 sub_feature/feature_fraction
-    "learning_rate": 0.04,  # 学习率
-    "num_leaves": 8,  # 最大叶数小于2^max_depth
-    "max_depth": 3,  # 最大层数
-    "min_child_weight": 0.02,
-    "min_split_gain": 0,
-    "random_state": 7,
-    "reg_alpha": 0.0,
-    "reg_lambda": 0.0,
-    "subsample_for_bin": 200000,
-    "subsample_freq": 0,
-    # "scale_pos_weight ": scale_pos_weight,
-}
-
-import time
-
 starttime = time.time()
 
 cv_results = lgb.cv(
@@ -141,7 +120,8 @@ cv_results = lgb.cv(
     lgbm_train,
     num_boost_round=10000,  # n_estimators
     early_stopping_rounds=100,
-    # Early stopping is an effective method for choosing the number of estimators rather than setting this as another hyperparameter that needs to be tuned!
+    # Early stopping is an effective method for choosing the number of estimators
+    # rather than setting this as another hyperparameter that needs to be tuned!
     nfold=10,
     seed=7,
     metrics="auc",  # Evaluation metrics to be monitored while CV.
@@ -156,11 +136,14 @@ print(
 )
 
 # Extract the Highest score
-results_best_score = max(cv_results['auc-mean'])
+results_best_score = max(cv_results["auc-mean"])
 # Standard deviation of best score
-results_best_std = cv_results['auc-stdv'][np.argmax(cv_results['auc-mean'])]
-print('The maximium ROC AUC on the validation set was {:.5f} with std of {:.5f}.'.format(results_best_score,
-                                                                                         results_best_std))
+results_best_std = cv_results["auc-stdv"][np.argmax(cv_results["auc-mean"])]
+print(
+    "The maximium ROC AUC on the validation set was {:.5f} with std of {:.5f}.".format(
+        results_best_score, results_best_std
+    )
+)
 
 # %%
 fig = plt.figure(figsize=(10, 6), dpi=100)
@@ -248,7 +231,7 @@ rfe_lgb_df.to_excel("rfe_lgb_df.xlsx")
 
 lgb_rfe_features = rfe_lgb_df.loc[
     rfe_lgb_df.rank_lgb_rfe <= 101
-    ].index.tolist()  # 这里取了前150个特征
+].index.tolist()  # 这里取了前150个特征
 X = X[lgb_rfe_features]
 # 获取rfe选出的特征的flag，获取当前特征对应flag不全为0的index，更新hit_indices
 flags = bairong.get_flags(lgb_rfe_features)
@@ -270,13 +253,12 @@ Y = pd.read_pickle("./Y_rfe.pkl")
 X = pd.read_pickle("./X_rfe.pkl")
 out_file = "gbm_trials_test.csv"
 
-import csv
 
 # File to save first results
 of_connection = open(out_file, "w")
 writer = csv.writer(of_connection)
 # Write the headers to the file
-writer.writerow(["loss", "params", "estimators", "train_time", 'i'])
+writer.writerow(["loss", "params", "estimators", "train_time", "i"])
 of_connection.close()
 
 fixed_params_bay = fixed_params.copy()
@@ -284,8 +266,6 @@ fixed_params_bay = fixed_params.copy()
 ks_score = functions.ks_kfold_objective(
     X, Y, model="lgb", params=fixed_params_bay, out_file=out_file
 )
-
-from hyperopt import fmin, tpe, hp, Trials
 
 para_space_mlp = {
     "class_weight": hp.choice("class_weight", [None, "balanced"]),
@@ -322,3 +302,79 @@ best = fmin(
 # 对贝叶斯调参后的所有参数，拟合计算训练测试ks、auc，寻找出效果最好且相差最小的那组参数
 trials_result = trials.trials
 print("贝叶斯调参结束", time.time() - starttime)
+
+# Sort the trials with lowest loss (highest AUC) first
+bayes_trials_results = sorted(trials.results, key=lambda x: x["loss"])
+print(bayes_trials_results[:2])
+
+# 保存贝叶斯参数迭代过程
+with open("trials.pkl", "wb") as f:
+    pickle.dump(trials, f)
+
+with open("trials.pkl", "rb") as f:
+    load = pickle.load(f)
+
+results = pd.read_csv("gbm_trials500.csv")
+# Sort with best scores on top and reset index for slicing
+results.sort_values("loss", ascending=True, inplace=True)
+results.reset_index(inplace=True, drop=True)
+results.head()
+
+
+# Convert from a string to a dictionary
+best_params = ast.literal_eval(results.loc[0, "params"])
+
+# 获取best参数所对应的迭代次数
+for i in range(0, max_evals):
+    param = trials_result[i]["misc"]["vals"]
+    param_1 = {k: v[0] for k, v in param.items()}
+    if param_1 == best:
+        print(i)
+
+# 根据贝叶斯每一次迭代的参数，对训练集、测试集的ks、auc作图
+
+ks_trains = []
+ks_tests = []
+auc_trains = []
+auc_tests = []
+space = []
+for i in range(0, max_evals):
+    param = trials_result[i]["misc"]["vals"]
+    param_1 = {k: v[0] for k, v in param.items()}
+    param_1["max_depth"] = int(param_1["max_depth"])
+    param_1["feature_num"] = int(param_1["feature_num"])
+    param_1["min_child_samples"] = int(param_1["min_child_samples"])
+    param_1["min_child_weight"] = int(param_1["min_child_weight"])
+    param_1["num_leaves"] = int(param_1["num_leaves"])
+    fixed_params.update(param_1)
+    feature_num = int(fixed_params.pop("feature_num"))
+    chosen_feature_1 = lgb_rfe_features[:feature_num]
+    flags_1 = bairong.get_flags(chosen_feature_1)
+    hit_indices_1 = bairong.get_hit_indices(Data, flags_1)
+    X_tr, X_te = X[chosen_feature_1], X_test[chosen_feature_1]
+    X_tr = X_tr.loc[X_tr.index.isin(hit_indices_1)]
+    Y_tr = Y.loc[Y.index.isin(hit_indices_1)]
+    X_te = X_te.loc[X_te.index.isin(hit_indices_1)]
+    Y_te = Y_test.loc[Y_test.index.isin(hit_indices_1)]
+    lgbm_tuner = functions.LGBModelTuner(
+        LGBMClassifier(**fixed_params), X_tr, Y, X_te, Y_te, hit_indices_1
+    )
+    result_ks = lgbm_tuner.get_model_result(fixed_params)
+    train_ks = result_ks["ks"][0]
+    test_ks = result_ks["ks"][1]
+    train_auc = result_ks["auc"][0]
+    test_auc = result_ks["auc"][1]
+    ks_trains.append(train_ks)
+    ks_tests.append(test_ks)
+    auc_trains.append(train_auc)
+    auc_tests.append(test_auc)
+    space.append(i)
+
+functions.models_ks("max_evals", space, ks_trains, ks_tests)
+functions.models_auc("max_evals", space, auc_trains, auc_tests)
+
+# 打印全部的迭代数据点太多，可选择打印出指定区间内的数据
+i = 60
+j = 80
+functions.models_ks("max_evals", space[i:j], ks_trains[i:j], ks_tests[i:j])
+functions.models_auc("max_evals", space[i:j], auc_trains[i:j], auc_tests[i:j])
