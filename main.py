@@ -251,7 +251,7 @@ print("time consuming:", time.time() - starttime)
 """
 Y = pd.read_pickle("./Y_rfe.pkl")
 X = pd.read_pickle("./X_rfe.pkl")
-out_file = "gbm_trials_test.csv"
+out_file = "gbm_trials_500_ziyang.csv"
 
 
 # File to save first results
@@ -288,7 +288,7 @@ para_space_mlp = {
 }
 # 进行贝叶斯调参
 trials = Trials()
-max_evals = 1  # max_evals迭代次数越大越慢，可设置合理的值
+max_evals =500   # max_evals迭代次数越大越慢，可设置合理的值
 
 starttime = time.time()
 best = fmin(
