@@ -162,7 +162,6 @@ results_best_std = cv_results['auc-stdv'][np.argmax(cv_results['auc-mean'])]
 print('The maximium ROC AUC on the validation set was {:.5f} with std of {:.5f}.'.format(results_best_score,
                                                                                          results_best_std))
 
-
 # %%
 fig = plt.figure(figsize=(10, 6), dpi=100)
 plt.title("Validation Curve with LightGBM (eta = 0.3)")
@@ -269,7 +268,7 @@ print("time consuming:", time.time() - starttime)
 """
 Y = pd.read_pickle("./Y_rfe.pkl")
 X = pd.read_pickle("./X_rfe.pkl")
-out_file = "gbm_trials2.csv"
+out_file = "gbm_trials_test.csv"
 
 import csv
 
@@ -277,7 +276,7 @@ import csv
 of_connection = open(out_file, "w")
 writer = csv.writer(of_connection)
 # Write the headers to the file
-writer.writerow(["loss", "params", "estimators", "train_time",'i'])
+writer.writerow(["loss", "params", "estimators", "train_time", 'i'])
 of_connection.close()
 
 fixed_params_bay = fixed_params.copy()
@@ -309,7 +308,7 @@ para_space_mlp = {
 }
 # 进行贝叶斯调参
 trials = Trials()
-max_evals =100   # max_evals迭代次数越大越慢，可设置合理的值
+max_evals = 1  # max_evals迭代次数越大越慢，可设置合理的值
 
 starttime = time.time()
 best = fmin(

@@ -36,7 +36,7 @@ log_file.setFormatter(log_formatter)
 
 # 给logger添加handler
 logger.addHandler(log_console)
-# logger.addHandler(log_file)
+logger.addHandler(log_file)
 
 ZH_CN_REGEX = r"([\u4e00-\u9fff]+)"  # 中国大陆区域的中文
 
@@ -739,7 +739,7 @@ def ks_kfold_objective(
 
         logger.info("开始训练1111111111111111")
         iter = 0
-        para = {}
+        estr = {}
         for train_idx, test_idx in kf.split(X):
             logger.info("循环2222222222222222")
             X_train, X_test = X.iloc[train_idx].values, X.iloc[test_idx].values
@@ -778,7 +778,7 @@ def ks_kfold_objective(
                 y_pred_test = clf.predict_proba(X_test)[:, 1]
 
                 iter += 1
-                para[iter] = {**params}
+                estr[iter] = {n_estimators}
 
             # elif model == 'xgb':
             #     train_data = xgb.DMatrix(X_train, y_train, silent=False)
@@ -810,7 +810,7 @@ def ks_kfold_objective(
         # Write to the csv file ('a' means append)
         of_connection = open(out_file, "a")
         writer = csv.writer(of_connection)
-        writer.writerow([loss, para, params, run_time, i])
+        writer.writerow([loss, params, estr, run_time, i])
 
         return {
             "loss": loss,
