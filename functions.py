@@ -1,6 +1,7 @@
 import csv
 import math
 import os
+import pprint
 import re
 from pathlib import Path
 import numpy as np
@@ -65,7 +66,7 @@ def get_header(data: str, verbose: bool = False):
 
     # 用第一行做header，若第二行有中文 and 数据类型全是object
     elif np.all(tmp_df.dtypes == "object") and any(
-            zh_cn_regex.search(f) for f in tmp_df.iloc[0, :].values
+        zh_cn_regex.search(f) for f in tmp_df.iloc[0, :].values
     ):
         zh_header_num = 1
 
@@ -115,14 +116,14 @@ def subset(ls1, ls2) -> bool:
 
 
 def split_train_test(
-        x: Union[pd.DataFrame, pd.Series],
-        y: Union[pd.DataFrame, pd.Series],
-        test_size: float = None,
-        train_size: float = None,
-        shuffle: bool = True,  # 在划分数据之前先打乱数据
-        stratify: np.ndarray = None,
-        *,
-        random_state: int = None,
+    x: Union[pd.DataFrame, pd.Series],
+    y: Union[pd.DataFrame, pd.Series],
+    test_size: float = None,
+    train_size: float = None,
+    shuffle: bool = True,  # 在划分数据之前先打乱数据
+    stratify: np.ndarray = None,
+    *,
+    random_state: int = None,
 ) -> Tuple:
     """
     Split dataframe or series into random train and test subsets. (wrap of sklearn `train_test_split` function)
@@ -201,12 +202,12 @@ def get_file_encoding(file: str) -> str:
 
 # read_from(data,index_col,skiprows,skip_cols,verbose)
 def read_from(
-        data: str,
-        header: int = 0,
-        index_col: str = None,
-        skiprows: List[str] = None,
-        skip_cols: List[str] = None,
-        verbose: bool = True,
+    data: str,
+    header: int = 0,
+    index_col: str = None,
+    skiprows: List[str] = None,
+    skip_cols: List[str] = None,
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """
     Read data intelligently. (only read in the possible models features, nonsense columns are omitted!)
@@ -270,7 +271,7 @@ def read_from(
 
 
 def del_nan(
-        df: pd.DataFrame, nan_ratio_threshold: float = 0.95, inplace: bool = False
+    df: pd.DataFrame, nan_ratio_threshold: float = 0.95, inplace: bool = False
 ) -> Union[None, pd.DataFrame]:
     """
     Delete the columns with too much nan values.
@@ -306,7 +307,7 @@ def del_nan(
 
 
 def del_mode(
-        df: pd.DataFrame, mode_ratio_threshold: float = 0.95, inplace=False
+    df: pd.DataFrame, mode_ratio_threshold: float = 0.95, inplace=False
 ) -> Union[None, pd.DataFrame]:
     """
     Delete the columns with too much mode values. (mode does not contain nan)
@@ -355,9 +356,9 @@ def del_mode(
 
 # 填充缺失值 + 数据瘦身
 def slim(
-        df: Union[pd.DataFrame, pd.Series],
-        nan_replacements: Tuple[int, str] = (-99, "blank"),
-        inplace: bool = False,
+    df: Union[pd.DataFrame, pd.Series],
+    nan_replacements: Tuple[int, str] = (-99, "blank"),
+    inplace: bool = False,
 ) -> Union[pd.DataFrame, pd.Series]:
     """
     Type fit function to slim the whole data object.
@@ -397,9 +398,9 @@ def slim(
 
 
 def slim_col(
-        x: pd.Series,
-        nan_replacements: Tuple[int, str] = (-99, "blank"),
-        inplace: bool = False,
+    x: pd.Series,
+    nan_replacements: Tuple[int, str] = (-99, "blank"),
+    inplace: bool = False,
 ) -> pd.Series:
     """
     Type fit function to slim a specific column.
@@ -461,7 +462,7 @@ def slim_col(
 
 
 def del_cat(
-        df: pd.DataFrame, cat_threshold: int = 10, inplace: bool = False
+    df: pd.DataFrame, cat_threshold: int = 10, inplace: bool = False
 ) -> Union[None, pd.DataFrame]:
     """
     Delete the columns with too much category.
@@ -567,10 +568,10 @@ def get_dummied(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_sorted_feature(
-        origin_features: Union[pd.Index, np.ndarray, list],
-        importances: np.ndarray,
-        threshold: Union[int, float] = None,
-        operator: str = ">",
+    origin_features: Union[pd.Index, np.ndarray, list],
+    importances: np.ndarray,
+    threshold: Union[int, float] = None,
+    operator: str = ">",
 ) -> List[str]:
     """
     Sort feature by feature importance, if threshold provided, return the sorted feature only satisfying the threshold.
@@ -612,9 +613,9 @@ def get_sorted_feature(
 
 
 def calc_ks(
-        score: Union[pd.Series, np.ndarray],
-        target: Union[pd.Series, np.ndarray],
-        method="origin_pf",
+    score: Union[pd.Series, np.ndarray],
+    target: Union[pd.Series, np.ndarray],
+    method="origin_pf",
 ) -> float:
     """
     Calculate ks value between predict and target.
@@ -680,13 +681,13 @@ def calc_ks(
         for i in range(0, section_num):
             split_point = sorted_point.iloc[
                 int(round(sample_num * (i + 1) / section_num)) - 1
-                ]
+            ]
             position_in_this_section = np.where(point <= split_point)[0]
             bad_percent[i] = (
-                    len(np.where(Y.iloc[position_in_this_section] == 1)[0]) / total_bad_num
+                len(np.where(Y.iloc[position_in_this_section] == 1)[0]) / total_bad_num
             )
             good_percent[i] = (
-                    len(np.where(Y.iloc[position_in_this_section] == 0)[0]) / total_good_num
+                len(np.where(Y.iloc[position_in_this_section] == 0)[0]) / total_good_num
             )
 
         ks_value = bad_percent - good_percent
@@ -705,14 +706,14 @@ i = 0
 
 
 def ks_kfold_objective(
-        X_raw: pd.DataFrame,
-        y: pd.Series,
-        model: str = "lgb",
-        params: dict = None,
-        n_splits=3,
-        random_state=7,
-        shuffle=True,
-        out_file="gbm_trials.csv",
+    X_raw: pd.DataFrame,
+    y: pd.Series,
+    model: str = "lgb",
+    params: dict = None,
+    n_splits=3,
+    random_state=7,
+    shuffle=True,
+    out_file="gbm_trials.csv",
 ) -> Callable:
     raw_features = X_raw.columns.values.tolist()
     # 将数据集分成了五份
@@ -725,12 +726,12 @@ def ks_kfold_objective(
 
         # Make sure parameters that need to be integers are integers
         for k in (
-                "feature_num",
-                "max_depth",
-                "num_leaves",
-                "n_estimators",
-                "min_child_samples",
-                "subsample_for_bin",
+            "feature_num",
+            "max_depth",
+            "num_leaves",
+            "n_estimators",
+            "min_child_samples",
+            "subsample_for_bin",
         ):
             if isinstance(kwargs.get(k), float):
                 kwargs[k] = int(kwargs[k])
@@ -838,13 +839,13 @@ class LGBModelTuner(object):
         self.history = []
         if isinstance(lgbm, lgb.Booster):
             assert (
-                    lgbm.params.get("seed") is not None
+                lgbm.params.get("seed") is not None
             ), "Better to set `seed` for lightgbm booster!"
             lgbm.params.update({"num_threads": -1})
             self.params = lgbm.params
         elif isinstance(lgbm, (LGBMClassifier, LGBMRegressor)):
             assert (
-                    lgbm.get_params().get("random_state") is not None
+                lgbm.get_params().get("random_state") is not None
             ), "Better to set `random_state` for lightgbm booster!"
             lgbm.n_jobs = -1
             self.params = lgbm.get_params()
@@ -854,8 +855,10 @@ class LGBModelTuner(object):
             )
 
     def get_model_result(self, params: dict) -> dict:
-        X, y = self.X.values, self.Y.values
-        X_test, y_test = self.X_test.values, self.Y_test.values
+        X, y = self.X, self.Y
+        X_test, y_test = self.X_test, self.Y_test
+        # X, y = self.X.values, self.Y.values
+        # X_test, y_test = self.X_test.values, self.Y_test.values
         if isinstance(self.estimator, lgb.Booster):
             params["metric"] = "auc"
             estimator = lgb.train(params, self.dataset_train)
@@ -960,7 +963,7 @@ def models_ks(hyper_param: str, space: list, ks_trains: list, ks_tests: list) ->
 
 
 def models_auc(
-        hyper_param: str, space: list, auc_trains: list, auc_tests: list
+    hyper_param: str, space: list, auc_trains: list, auc_tests: list
 ) -> None:
     """
     Plot train test data distribution curve.
@@ -989,7 +992,7 @@ def models_auc(
 
 
 def calc_auc(
-        preds: Union[np.ndarray, pd.Series], actual: Union[np.ndarray, pd.Series]
+    preds: Union[np.ndarray, pd.Series], actual: Union[np.ndarray, pd.Series]
 ) -> float:
     """
     Calculate receiver operating characteristic.

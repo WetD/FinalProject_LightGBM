@@ -13,10 +13,11 @@ from hyperopt import fmin, tpe, hp, Trials
 import csv
 import matplotlib.pyplot as plt
 import ast
+from tqdm import tqdm
 
 fixed_params = {
     # "importance_type": "gain",  # result contains total gains of splits which use the feature.
-    # 'class_weight': None,  # 类别型变量权重
+    "class_weight": None,  # 类别型变量权重
     # 'n_estimators': 500,
     "boost_from_average": True,
     "boosting_type": "gbdt",  # 提升树的类型 boost/boosting
@@ -87,6 +88,16 @@ hit_indices = bairong.get_hit_indices(Data, flags)
 
 # 数据划分
 X, X_test, Y, Y_test = functions.split_train_test(X, Y, test_size=0.3, random_state=3)
+X.to_pickle("./X.pkl")
+X_test.to_pickle("./X_test.pkl")
+Y.to_pickle("./Y.pkl")
+Y_test.to_pickle("./Y_test.pkl")
+
+Y_test = pd.read_pickle("./Y_test.pkl")
+Y = pd.read_pickle("./Y.pkl")
+X_test = pd.read_pickle("./X_test.pkl")
+X = pd.read_pickle("./X.pkl")
+
 # %%
 
 
@@ -253,7 +264,6 @@ Y = pd.read_pickle("./Y_rfe.pkl")
 X = pd.read_pickle("./X_rfe.pkl")
 out_file = "gbm_trials_500_ziyang.csv"
 
-
 # File to save first results
 of_connection = open(out_file, "w")
 writer = csv.writer(of_connection)
@@ -288,7 +298,7 @@ para_space_mlp = {
 }
 # 进行贝叶斯调参
 trials = Trials()
-max_evals =500   # max_evals迭代次数越大越慢，可设置合理的值
+max_evals = 500  # max_evals迭代次数越大越慢，可设置合理的值
 
 starttime = time.time()
 best = fmin(
@@ -311,15 +321,16 @@ print(bayes_trials_results[:2])
 with open("trials.pkl", "wb") as f:
     pickle.dump(trials, f)
 
-with open("trials.pkl", "rb") as f:
+with open("trials_ziyang_500.pkl", "rb") as f:
     load = pickle.load(f)
 
-results = pd.read_csv("gbm_trials500.csv")
+results = pd.read_csv("gbm_trials_500_ziyang.csv")
 # Sort with best scores on top and reset index for slicing
 results.sort_values("loss", ascending=True, inplace=True)
 results.reset_index(inplace=True, drop=True)
 results.head()
 
+results = pd.read_csv("gbm_trials_500_ziyang.csv")
 
 # Convert from a string to a dictionary
 best_params = ast.literal_eval(results.loc[0, "params"])
@@ -330,34 +341,51 @@ for i in range(0, max_evals):
     param_1 = {k: v[0] for k, v in param.items()}
     if param_1 == best:
         print(i)
+# %%   根据贝叶斯每一次迭代的参数，对训练集、测试集的ks、auc作图
 
-# 根据贝叶斯每一次迭代的参数，对训练集、测试集的ks、auc作图
 
+max_evals = 500  # max_evals迭代次数越大越慢，可设置合理的值
 ks_trains = []
 ks_tests = []
 auc_trains = []
 auc_tests = []
 space = []
-for i in range(0, max_evals):
-    param = trials_result[i]["misc"]["vals"]
-    param_1 = {k: v[0] for k, v in param.items()}
-    param_1["max_depth"] = int(param_1["max_depth"])
-    param_1["feature_num"] = int(param_1["feature_num"])
-    param_1["min_child_samples"] = int(param_1["min_child_samples"])
-    param_1["min_child_weight"] = int(param_1["min_child_weight"])
-    param_1["num_leaves"] = int(param_1["num_leaves"])
-    fixed_params.update(param_1)
+X_rfe = pd.read_pickle("./X_rfe.pkl")
+Data = pd.read_pickle("./Data.pkl")
+Y_test = pd.read_pickle("./Y_test.pkl")
+Y = pd.read_pickle("./Y.pkl")
+X_test = pd.read_pickle("./X_test.pkl")
+X = pd.read_pickle("./X.pkl")
+# with open("trials_ziyang_500.pkl", "rb") as f:
+#     load = pickle.load(f)
+
+results = pd.read_csv("gbm_trials_500_ziyang.csv")
+
+# Convert from a string to a dictionary
+# params_1 = ast.literal_eval(results.loc[:, "params"])
+
+# for i in range(0, max_evals):
+#     params_1 = ast.literal_eval(results.loc[i, "params"])
+#     print(params_1["min_child_samples"])
+#     print(params_1["class_weight"])
+
+for i in tqdm(range(max_evals)):
+    params_1 = ast.literal_eval(results.loc[i, "params"])  # 将csv中的参数转为字典
+    fixed_params.update(params_1)
+
+    # 提取出命中前feature_num个特征所在flag的index
     feature_num = int(fixed_params.pop("feature_num"))
-    chosen_feature_1 = lgb_rfe_features[:feature_num]
+    # chosen_feature_1 = lgb_rfe_features[:feature_num]
+    chosen_feature_1 = X_rfe.columns[:feature_num]
     flags_1 = bairong.get_flags(chosen_feature_1)
     hit_indices_1 = bairong.get_hit_indices(Data, flags_1)
-    X_tr, X_te = X[chosen_feature_1], X_test[chosen_feature_1]
-    X_tr = X_tr.loc[X_tr.index.isin(hit_indices_1)]
-    Y_tr = Y.loc[Y.index.isin(hit_indices_1)]
-    X_te = X_te.loc[X_te.index.isin(hit_indices_1)]
-    Y_te = Y_test.loc[Y_test.index.isin(hit_indices_1)]
+    X_tr, X_te = X[chosen_feature_1], X_test[chosen_feature_1]  # 选择特征
+    X_tr = X_tr.loc[X_tr.index.isin(hit_indices_1)]  # 选择index
+    Y_tr = Y.loc[Y.index.isin(hit_indices_1)]  # 选择index
+    X_te = X_te.loc[X_te.index.isin(hit_indices_1)]  # 选择index
+    Y_te = Y_test.loc[Y_test.index.isin(hit_indices_1)]  # 选择index
     lgbm_tuner = functions.LGBModelTuner(
-        LGBMClassifier(**fixed_params), X_tr, Y, X_te, Y_te, hit_indices_1
+        LGBMClassifier(**fixed_params), X_tr, Y_tr, X_te, Y_te, hit_indices_1
     )
     result_ks = lgbm_tuner.get_model_result(fixed_params)
     train_ks = result_ks["ks"][0]
@@ -370,11 +398,34 @@ for i in range(0, max_evals):
     auc_tests.append(test_auc)
     space.append(i)
 
-functions.models_ks("max_evals", space, ks_trains, ks_tests)
-functions.models_auc("max_evals", space, auc_trains, auc_tests)
+ks_auc_df = pd.DataFrame(
+    {
+        "ks_trains": ks_trains,
+        "ks_tests": ks_tests,
+        "auc_trains": auc_trains,
+        "auc_tests": auc_tests,
+    }
+)
+ks_auc_df.to_pickle("./ks_auc_df.pkl")
+
+# %%
+ks_auc_df = pd.read_pickle("./ks_auc_df.pkl")
+space = [i for i in range(500)]
+
+# 打印全部的迭代数据点
+functions.models_ks("max_evals", space, ks_auc_df["ks_trains"], ks_auc_df["ks_tests"])
+functions.models_auc(
+    "max_evals", space, ks_auc_df["auc_trains"], ks_auc_df["auc_tests"]
+)
 
 # 打印全部的迭代数据点太多，可选择打印出指定区间内的数据
-i = 60
-j = 80
-functions.models_ks("max_evals", space[i:j], ks_trains[i:j], ks_tests[i:j])
-functions.models_auc("max_evals", space[i:j], auc_trains[i:j], auc_tests[i:j])
+i = 450
+j = 500
+functions.models_ks(
+    "max_evals", space[i:j], ks_auc_df["ks_trains"][i:j], ks_auc_df["ks_tests"][i:j]
+)
+functions.models_auc(
+    "max_evals", space[i:j], ks_auc_df["auc_trains"][i:j], ks_auc_df["auc_tests"][i:j]
+)
+
+# 2019-11-21 01:54:20,452  -> 2019-11-21 02:34:01,666
