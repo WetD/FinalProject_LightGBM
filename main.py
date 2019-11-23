@@ -262,7 +262,7 @@ print("time consuming:", time.time() - starttime)
 """
 Y = pd.read_pickle("./Y_rfe.pkl")
 X = pd.read_pickle("./X_rfe.pkl")
-out_file = "gbm_trials_5.csv"
+out_file = "gbm_trials_100_ziyang1123.csv"
 
 # File to save first results
 of_connection = open(out_file, "w")
@@ -293,7 +293,7 @@ para_space_mlp = {
             {"boosting_type": "goss", "subsample": 1.0},
         ],
     ),
-    "subsample": hp.uniform("subsample", 0.5, 1),
+    # "subsample": hp.uniform("subsample", 0.5, 1),
     "learning_rate": hp.loguniform("learning_rate", np.log(0.01), np.log(0.2)),
     "num_leaves": hp.quniform("num_leaves", 2, 32, 1),
     "subsample_for_bin": hp.quniform("subsample_for_bin", 20000, 300000, 20000),
