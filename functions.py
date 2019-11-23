@@ -714,8 +714,9 @@ def ks_kfold_objective(
     n_splits=3,
     random_state=7,
     shuffle=True,
-    out_file="gbm_trials.csv",
+    out_file="gbm_trials",
 ) -> Callable:
+    out_file = '{}.csv'.format(out_file)
     raw_features = X_raw.columns.values.tolist()
     # 将数据集分成了五份
     kf = KFold(n_splits=n_splits, random_state=random_state, shuffle=shuffle)

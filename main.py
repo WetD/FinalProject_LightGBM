@@ -17,8 +17,8 @@ import matplotlib.pyplot as plt
 import ast
 from tqdm import tqdm
 
-out_file = "gbm_trials_100_ziyang1123"
-max_evals = 100  # max_evals迭代次数越大越慢，可设置合理的值
+out_file = "gbm_trials_200_ziyang1123"
+max_evals = 200  # max_evals迭代次数越大越慢，可设置合理的值
 
 fixed_params = {
     # "importance_type": "gain",  # result contains total gains of splits which use the feature.
@@ -41,12 +41,12 @@ fixed_params = {
     "subsample_freq": 0,
     # "scale_pos_weight ": scale_pos_weight,
 }
-X_rfe = pd.read_pickle("./X_rfe.pkl")
-Data = pd.read_pickle("./Data.pkl")
-Y_test = pd.read_pickle("./Y_test.pkl")
-Y = pd.read_pickle("./Y.pkl")
-X_test = pd.read_pickle("./X_test.pkl")
-X = pd.read_pickle("./X.pkl")
+# X_rfe = pd.read_pickle("./X_rfe.pkl")
+# Data = pd.read_pickle("./Data.pkl")
+# Y_test = pd.read_pickle("./Y_test.pkl")
+# Y = pd.read_pickle("./Y.pkl")
+# X_test = pd.read_pickle("./X_test.pkl")
+# X = pd.read_pickle("./X.pkl")
 # %%
 
 """
