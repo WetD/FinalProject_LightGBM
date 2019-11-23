@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import ast
 from tqdm import tqdm
 
-out_file = "gbm_trials_200_ziyang1123_r6"
+out_file = "gbm_trials_200_ziyang1123_r555"
 max_evals = 200  # max_evals迭代次数越大越慢，可设置合理的值
 
 fixed_params = {
@@ -34,7 +34,7 @@ fixed_params = {
     "max_depth": 3,  # 最大层数
     "min_child_weight": 0.02,
     "min_split_gain": 0,
-    "random_state": 666,
+    "random_state": 555,
     "reg_alpha": 0.0,
     "reg_lambda": 0.0,
     "subsample_for_bin": 200000,
@@ -324,7 +324,7 @@ best = fmin(
     para_space_mlp,
     algo=tpe.suggest,
     max_evals=max_evals,
-    rstate=np.random.RandomState(666),
+    rstate=np.random.RandomState(555),
     trials=trials,
 )
 # 对贝叶斯调参后的所有参数，拟合计算训练测试ks、auc，寻找出效果最好且相差最小的那组参数
