@@ -22,6 +22,7 @@ import time
 from hyperopt import STATUS_OK
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
+import seaborn as sns
 
 logger = getLogger("Data_process")
 logger.setLevel(INFO)
@@ -724,6 +725,13 @@ def ks_kfold_objective(
     def ks_score(kwargs: dict) -> dict:
         starttime = time.time()
 
+        # Retrieve the subsample if present otherwise set to 1.0
+        subsample = kwargs["boosting_type"].get("subsample", 1.0)
+
+        # Extract the boosting type
+        kwargs["boosting_type"] = kwargs["boosting_type"]["boosting_type"]
+        kwargs["subsample"] = subsample
+
         # Make sure parameters that need to be integers are integers
         for k in (
             "feature_num",
@@ -741,10 +749,11 @@ def ks_kfold_objective(
         X = X_raw[chosen_feature]
 
         logger.info("开始训练1111111111111111")
+        logger.info("{}".format(kwargs))
+
         iter = 0
         estr = {}
         for train_idx, test_idx in kf.split(X):
-            logger.info("循环2222222222222222")
             X_train, X_test = X.iloc[train_idx].values, X.iloc[test_idx].values
             y_train, y_test = y.iloc[train_idx].values, y.iloc[test_idx].values
             params.update(kwargs)
@@ -893,11 +902,11 @@ class LGBModelTuner(object):
         # return {'train': (ks_train, auc_train), 'test': (ks_test, auc_test)}
         return {"ks": (ks_train, ks_test), "auc": (auc_train, auc_test)}
 
-    def try_tune(self, param: str, space: list, plot: bool = True) -> None:
+    def try_tune(self, param: str, space: list, plot: bool = True):
         params = {k: v for k, v in self.params.items()}
         ks_trains, ks_tests = [], []
         auc_trains, auc_tests = [], []
-        for value in space:
+        for value in tqdm(space):
             params.update({param: value})
             result = self.get_model_result(params)
             ks_train, ks_test = result["ks"][0], result["ks"][1]
@@ -919,7 +928,14 @@ class LGBModelTuner(object):
         if plot:
             models_ks(param, space, ks_trains, ks_tests)
             models_auc(param, space, auc_trains, auc_tests)
-        return None
+        ks_auc_df = {
+            "ks_trains": ks_trains,
+            "ks_tests": ks_tests,
+            "auc_trains": auc_trains,
+            "auc_tests": auc_tests,
+        }
+
+        return ks_auc_df
 
     def tune(self, param: str, value: Union[str, int, float]) -> None:
         self.params.update({param: value})
@@ -947,10 +963,10 @@ def models_ks(hyper_param: str, space: list, ks_trains: list, ks_tests: list) ->
     :param ks_tests: test data ks
     :return: None
     """
-    plt.figure()
+    plt.figure(figsize=(20, 10))
     plt.plot(space, ks_trains, "s-", color="r", label="KS train")
     plt.plot(space, ks_tests, "o-", color="g", label="KS test")
-    if len(space) <= 20:
+    if len(space) <= 100:
         plt.xticks(space)
     else:
         pass
@@ -974,11 +990,11 @@ def models_auc(
     :param auc_tests: test data auc
     :return: None
     """
-    plt.figure()
+    plt.figure(figsize=(20, 10))
     plt.plot(space, auc_trains, "s-", color="r", label="AUC train")
     plt.plot(space, auc_tests, "o-", color="g", label="AUC test")
 
-    if len(space) <= 20:
+    if len(space) <= 100:
         plt.xticks(space)
     else:
         pass
@@ -1014,3 +1030,83 @@ def calc_auc(
     auc_value = auc(fpr, tpr)
     logger.info("Current predict AUC is {}...".format(auc_value))
     return auc_value
+
+
+def tune_n_estimators_learning_rate(lgbm_tuner, learning_rate, n_estimators):
+    ks_trains = []
+    ks_tests = []
+    auc_trains = []
+    auc_tests = []
+    n_estimators = n_estimators
+    learning_rate = learning_rate
+    for i in n_estimators:
+        for j in learning_rate:
+            lgbm_tuner.tune("n_estimators", i)
+            lgbm_tuner.tune("learning_rate", j)
+            params = lgbm_tuner.params
+            result_ks = lgbm_tuner.get_model_result(params)
+            train_ks = result_ks["ks"][0]
+            test_ks = result_ks["ks"][1]
+            train_auc = result_ks["auc"][0]
+            test_auc = result_ks["auc"][1]
+            ks_trains.append(train_ks)
+            ks_tests.append(test_ks)
+            auc_trains.append(train_auc)
+            auc_tests.append(test_auc)
+
+    n_estimators_a = np.array(n_estimators)
+    learning_rate_a = np.array(learning_rate)
+    learning_rate_a, n_estimators_a = np.meshgrid(learning_rate_a, n_estimators_a)
+
+    n_estimators_a.shape = (1, len(n_estimators) * len(learning_rate))
+    learning_rate_a.shape = (1, len(n_estimators) * len(learning_rate))
+
+    df = pd.DataFrame()
+    df["n_estimators"] = n_estimators_a[0]
+    df["learning_rate"] = learning_rate_a[0]
+    df["auc_trains"] = auc_trains
+    df["auc_tests"] = auc_tests
+
+    df_pt = df.pivot_table(index="learning_rate", columns="n_estimators")
+    df_pt.head()
+
+    df_test = df_pt["auc_tests"]
+    df_train = df_pt["auc_trains"]
+
+    return df_train, df_test
+
+
+def plot_n_estimators_learning_rate(df_train, df_test):
+    f, ax = plt.subplots(figsize=(10, 4))
+    cmap = sns.cubehelix_palette(start=1, rot=3, gamma=1, as_cmap=True,)
+    sns.heatmap(
+        df_train, cmap=cmap, linewidths=0.05, ax=ax, center=1.05 * df_train.max().max()
+    )
+    ax.set_title("Auc of Train cross by n_estimators and learning_rate")
+    ax.set_xlabel("n_estimators")
+    ax.set_ylabel("learning_rate")
+    plt.show()
+
+    f, ax = plt.subplots(figsize=(10, 4))
+    cmap = sns.cubehelix_palette(start=1, rot=3, gamma=0.8, as_cmap=True)
+    sns.heatmap(
+        df_test, cmap=cmap, linewidths=0.05, ax=ax, center=1.05 * df_test.max().max()
+    )
+    ax.set_title("Auc of Test cross by n_estimators and learning_rate")
+    ax.set_xlabel("n_estimators")
+    ax.set_ylabel("learning_rate")
+    plt.show()
+
+    f, ax = plt.subplots(figsize=(10, 4))
+    cmap = sns.cubehelix_palette(start=1, rot=3, gamma=0.8, as_cmap=True)
+    sns.heatmap(
+        df_train - df_test,
+        cmap=cmap,
+        linewidths=0.05,
+        ax=ax,
+        center=1.5 * (df_train - df_test).max().max(),
+    )
+    ax.set_title("Auc of (Train-test) cross by n_estimators and learning_rate")
+    ax.set_xlabel("n_estimators")
+    ax.set_ylabel("learning_rate")
+    plt.show()
