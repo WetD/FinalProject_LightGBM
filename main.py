@@ -286,10 +286,10 @@ para_space_mlp = {
                 "boosting_type": "gbdt",
                 "subsample": hp.uniform("gdbt_subsample", 0.5, 1),
             },
-            {
-                "boosting_type": "dart",
-                "subsample": hp.uniform("dart_subsample", 0.5, 1),
-            },
+            # {
+            #     "boosting_type": "dart",
+            #     "subsample": hp.uniform("dart_subsample", 0.5, 1),
+            # },
             {"boosting_type": "goss", "subsample": 1.0},
         ],
     ),
@@ -308,7 +308,7 @@ para_space_mlp = {
 }
 # 进行贝叶斯调参
 trials = Trials()
-max_evals = 5  # max_evals迭代次数越大越慢，可设置合理的值
+max_evals = 100  # max_evals迭代次数越大越慢，可设置合理的值
 
 starttime = time.time()
 best = fmin(
