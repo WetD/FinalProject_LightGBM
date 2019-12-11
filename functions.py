@@ -716,12 +716,13 @@ def ks_kfold_objective(
     shuffle=True,
     out_file="gbm_trials",
 ) -> Callable:
-    out_file = '{}.csv'.format(out_file)
+    out_file = "{}.csv".format(out_file)
     raw_features = X_raw.columns.values.tolist()
     # 将数据集分成了五份
     kf = KFold(n_splits=n_splits, random_state=random_state, shuffle=shuffle)
     global i
     i += 1
+
 
     def ks_score(kwargs: dict) -> dict:
         starttime = time.time()
@@ -755,8 +756,9 @@ def ks_kfold_objective(
         iter = 0
         estr = {}
         for train_idx, test_idx in kf.split(X):
-            X_train, X_test = X.iloc[train_idx].values, X.iloc[test_idx].values
-            y_train, y_test = y.iloc[train_idx].values, y.iloc[test_idx].values
+
+            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
             params.update(kwargs)
             try:
                 params.pop("n_estimators")
@@ -771,17 +773,21 @@ def ks_kfold_objective(
                 # # Extract the boosting type
                 # params["boosting_type"] = params["boosting_type"]["boosting_type"]
                 # params["subsample"] = subsample
+
                 train_data = lgb.Dataset(X_train, y_train, silent=True)
+
                 cv_result = lgb.cv(
                     params,
                     train_data,
-                    num_boost_round=10000,
-                    nfold=5,
-                    metrics="auc",
+                    num_boost_round=10000,  # n_estimators
                     early_stopping_rounds=100,
+                    nfold=5,
+                    seed=555,
+                    metrics="auc",  # Evaluation metrics to be monitored while CV.
                     verbose_eval=False,
                 )
                 # Boosting rounds that returned the highest cv score
+                print('222222222222222')
                 n_estimators = int(np.argmax(cv_result["auc-mean"]) + 1)
 
                 logger.info("n_estimators:{}".format(n_estimators))
@@ -807,7 +813,6 @@ def ks_kfold_objective(
             #     y_pred_test = clf.predict_proba(X_test)[:, 1]
             else:
                 raise NotImplementedError("Not implemented!")
-
             ks_list.append(calc_ks(y_pred_test, y_test, method="crosstab"))
             # model.predict_proba(X_test)=
             # array([[0.1,0.9],   #代表[2,3,4,5]被判断为0的概率为0.1，被判断为1的概率为0.9
@@ -903,7 +908,7 @@ class LGBModelTuner(object):
         # return {'train': (ks_train, auc_train), 'test': (ks_test, auc_test)}
         return {"ks": (ks_train, ks_test), "auc": (auc_train, auc_test)}
 
-    def try_tune(self, param: str, space: list, plot: bool = True):
+    def try_tune(self, param: str, space: list, plot: bool = False):
         params = {k: v for k, v in self.params.items()}
         ks_trains, ks_tests = [], []
         auc_trains, auc_tests = [], []
@@ -929,12 +934,14 @@ class LGBModelTuner(object):
         if plot:
             models_ks(param, space, ks_trains, ks_tests)
             models_auc(param, space, auc_trains, auc_tests)
-        ks_auc_df = {
-            "ks_trains": ks_trains,
-            "ks_tests": ks_tests,
-            "auc_trains": auc_trains,
-            "auc_tests": auc_tests,
-        }
+        ks_auc_df = pd.DataFrame(
+            {
+                "ks_trains": ks_trains,
+                "ks_tests": ks_tests,
+                "auc_trains": auc_trains,
+                "auc_tests": auc_tests,
+            }
+        )
 
         return ks_auc_df
 
@@ -1111,3 +1118,52 @@ def plot_n_estimators_learning_rate(df_train, df_test):
     ax.set_xlabel("n_estimators")
     ax.set_ylabel("learning_rate")
     plt.show()
+
+
+def cal_ks(point, Y, section_num=20):
+    Y = pd.Series(Y)
+    sample_num = len(Y)
+
+    bad_percent = np.zeros([section_num, 1])
+    good_percent = np.zeros([section_num, 1])
+
+    point = pd.DataFrame(point)
+    sorted_point = point.sort_values(by=0)
+    total_bad_num = len(np.where(Y == 1)[0])
+    total_good_num = len(np.where(Y == 0)[0])
+
+    for i in range(0, section_num):
+        split_point = sorted_point.iloc[int(round(sample_num * (i + 1) / section_num)) - 1]
+        position_in_this_section = np.where(point <= split_point)[0]
+        bad_percent[i] = len(np.where(Y.iloc[position_in_this_section] == 1)[0]) / total_bad_num
+        good_percent[i] = len(np.where(Y.iloc[position_in_this_section] == 0)[0]) / total_good_num
+
+    ks_value = bad_percent - good_percent
+
+    return ks_value, bad_percent, good_percent
+
+
+def PSI(score_train, score_test, section_num=10):
+    score_train = pd.DataFrame(score_train)
+    score_test = pd.DataFrame(score_test)
+
+    total_train_num = len(score_train)
+    total_test_num = len(score_test)
+
+    sorted_score_train = score_train.sort_values(by=0)
+
+    PSI_value = 0
+
+    for i in range(0, section_num):
+        lower_bound = sorted_score_train.iloc[int(round(total_train_num * (i) / section_num))]
+        higher_bound = sorted_score_train.iloc[int(round(total_train_num * (i + 1) / section_num)) - 1]
+        score_train_percent = len(
+            np.where((score_train >= lower_bound) & (score_train <= higher_bound))[0]) / total_train_num
+        score_test_percent = len(
+            np.where((score_test >= lower_bound) & (score_test <= higher_bound))[0]) / total_test_num
+
+        PSI_value += (score_test_percent - score_train_percent) * np.log(score_test_percent / score_train_percent)
+
+    return PSI_value
+
+
